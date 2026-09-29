@@ -48,10 +48,9 @@ const THEMES = {
 // ---------- helpers ----------
 const n = v => String(+(+v).toFixed(2));
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const nbsp = s => esc(s).replace(/ /g, ' ');
+const nbsp = s => esc(s).replace(/ /g, '\u00a0');
 const MONO = `font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace"`;
 const SANS = `font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif"`;
-const EASE = 'calcMode="spline" keySplines=".2 .8 .2 1"';
 const box = (x, y, w, h, r) => `M${x + r} ${y}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1-${r} ${r}h${-(w - 2 * r)}a${r} ${r} 0 0 1-${r}-${r}v${-(h - 2 * r)}a${r} ${r} 0 0 1 ${r}-${r}z`;
 let seed = 11;
 const rnd = (a = 0, b = 1) => a + (b - a) * ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -78,6 +77,13 @@ const TX = T.x + 32;                                 // left edge of the termina
 const LINE = 0.075;                                  // one portrait line
 const ART0 = 0.4, ART1 = ART0 + ROWS * LINE;
 const at = { whoami: 0.3, hi: 0.85, name: 1.0, role: 1.5, cat: 1.8, rows: 2.6, ls: 3.3, pills: 3.95, links: 4.9 };
+
+// The markup describes the finished banner. Every intro animation starts at 0 and holds the hidden state
+// until its moment, so a viewer that does not animate shows the finished banner instead of empty cards.
+const part = (a, total) => +(a / total).toFixed(4);
+const fadeIn = (begin, dur = 0.45, to = 1) => `<animate attributeName="opacity" values="0;0;${to}" keyTimes="0;${part(begin, begin + dur)};1" dur="${n(begin + dur)}s" fill="freeze"/>`;
+const flip = (begin, from, to) => `<animate attributeName="opacity" calcMode="discrete" values="${from};${to}" keyTimes="0;${part(begin, begin + 1)}" dur="${n(begin + 1)}s" fill="freeze"/>`;
+const slideIn = (begin, dy) => `<animateTransform attributeName="transform" type="translate" values="0 ${dy};0 ${dy};0 0" keyTimes="0;${part(begin, begin + 0.5)};1" calcMode="spline" keySplines="0 0 1 1;.2 .8 .2 1" dur="${n(begin + 0.5)}s" fill="freeze"/>`;
 
 function build(t) {
   const [violet, cyan, green] = t.accent;
@@ -156,7 +162,10 @@ function build(t) {
   const cell = (r, c) => [AX + c * CW, AY + r * CH + 9.4];
   const lastCol = Math.max(...art[ROWS - 1].map((ch, i) => ch === ' ' ? -1 : i)) + 1;
 
-  defs.push(`<clipPath id="typed">${art.map((_, i) => `<rect x="${AX - 2}" y="${n(AY + i * CH - 0.5)}" width="0" height="${CH}"><animate attributeName="width" from="0" to="${COLS * CW + 4}" begin="${n(ART0 + i * LINE)}s" dur="${LINE}s" fill="freeze"/></rect>`).join('')}</clipPath>`);
+  defs.push(`<clipPath id="typed">${art.map((_, i) => {
+    const from = ART0 + i * LINE, full = COLS * CW + 4;
+    return `<rect x="${AX - 2}" y="${n(AY + i * CH - 0.5)}" width="${full}" height="${CH}"><animate attributeName="width" values="0;0;${full}" keyTimes="0;${part(from, from + LINE)};1" dur="${n(from + LINE)}s" fill="freeze"/></rect>`;
+  }).join('')}</clipPath>`);
 
   const portrait = [];
   portrait.push(`<ellipse cx="${AX + 150}" cy="${AY + 190}" rx="230" ry="250" fill="url(#aura)"><animate attributeName="opacity" values="0.55;1;0.55" dur="5s" repeatCount="indefinite"/></ellipse>`);
@@ -166,11 +175,10 @@ ${art.map((l, i) => l.some(ch => ch !== ' ') ? `    <text x="${AX}" y="${n(AY + 
 ${eyes.map(e => { const [x, y] = cell(e.r, e.c); return `    <text x="${x}" y="${y}">${esc(e.ch)}<animate attributeName="opacity" calcMode="discrete" values="1;0;1" keyTimes="0;0.95;0.98" dur="5.4s" repeatCount="indefinite"/></text><text x="${x}" y="${y}" opacity="0">-<animate attributeName="opacity" calcMode="discrete" values="0;1;0" keyTimes="0;0.95;0.98" dur="5.4s" repeatCount="indefinite"/></text>`; }).join('\n')}
 ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1" dur="${k ? 2.3 : 3.1}s" repeatCount="indefinite"/>${s.rows.map((row, i) => `<text x="${AX + s.col * CW}" y="${n(AY + (s.row + i) * CH + 9.4)}" textLength="${s.w * CW}">${nbsp(row)}</text>`).join('')}</g>`).join('\n')}
   </g></g>
-  <rect x="${AX}" y="${AY}" width="${CW}" height="11" rx="1" fill="${cyan}" opacity="0">
-    <animate attributeName="opacity" from="0" to="1" begin="${ART0}s" dur="0.01s" fill="freeze"/>
+  <rect x="${AX + lastCol * CW + 3}" y="${AY + (ROWS - 1) * CH}" width="${CW}" height="11" rx="1" fill="${cyan}">
+    ${flip(ART0, 0, 1)}
     <animate attributeName="x" from="${AX}" to="${AX + COLS * CW}" begin="${ART0}s" dur="${LINE}s" repeatCount="${ROWS}"/>
-    <animate attributeName="y" calcMode="discrete" values="${art.map((_, i) => n(AY + i * CH)).join(';')}" begin="${ART0}s" dur="${n(ROWS * LINE)}s" fill="freeze"/>
-    <animate attributeName="x" calcMode="discrete" values="${AX + lastCol * CW + 3};${AX + lastCol * CW + 3}" begin="${n(ART1)}s" dur="1s" fill="freeze"/>
+    <animate attributeName="y" calcMode="discrete" values="${art.map((_, i) => n(AY + i * CH)).join(';')}" begin="${ART0}s" dur="${n(ROWS * LINE)}s"/>
     <animate attributeName="opacity" calcMode="discrete" values="1;0" begin="${n(ART1)}s" dur="1.1s" repeatCount="indefinite"/>
   </rect>
 </g>`);
@@ -185,10 +193,10 @@ ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1
 <circle cx="${L.x + 27}" cy="${L.y + 21}" r="3.5" fill="none" stroke="${green}"><animate attributeName="r" values="3.5;9" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.7;0" dur="2s" repeatCount="indefinite"/></circle>
 <text x="${L.x + 40}" y="${L.y + 25.5}" ${MONO} font-size="12" fill="${t.muted}">portrait.ascii</text>
 <text x="${L.x + L.w - 24}" y="${L.y + 25.5}" ${MONO} font-size="12" fill="${t.muted}" text-anchor="end">${COLS} x ${ROWS}</text>
-<text x="${AX}" y="${foot}" ${MONO} font-size="11.5" fill="${t.muted}">rendering<animate attributeName="opacity" from="1" to="0" begin="${n(ART1)}s" dur="0.01s" fill="freeze"/></text>
-<text x="${AX}" y="${foot}" ${MONO} font-size="11.5" fill="${t.muted}" opacity="0">rendered in ${n(ROWS * LINE)}s<animate attributeName="opacity" from="0" to="1" begin="${n(ART1)}s" dur="0.01s" fill="freeze"/></text>
+<text x="${AX}" y="${foot}" ${MONO} font-size="11.5" fill="${t.muted}" opacity="0">rendering${flip(ART1, 1, 0)}</text>
+<text x="${AX}" y="${foot}" ${MONO} font-size="11.5" fill="${t.muted}">rendered in ${n(ROWS * LINE)}s${flip(ART1, 0, 1)}</text>
 <rect x="${AX}" y="${foot + 9}" width="${COLS * CW}" height="3" rx="1.5" fill="${t.edge}" fill-opacity="${t.edgeOpacity}"/>
-<rect x="${AX}" y="${foot + 9}" width="0" height="3" rx="1.5" fill="url(#flow)"><animate attributeName="width" from="0" to="${COLS * CW}" begin="${ART0}s" dur="${n(ROWS * LINE)}s" fill="freeze"/></rect>`;
+<rect x="${AX}" y="${foot + 9}" width="${COLS * CW}" height="3" rx="1.5" fill="url(#flow)"><animate attributeName="width" values="0;0;${COLS * CW}" keyTimes="0;${part(ART0, ART1)};1" dur="${n(ART1)}s" fill="freeze"/></rect>`;
 
   out.push(card(L, 'cardL', 8));
   out.push(`<g clip-path="url(#cardL)">${portrait.join('\n')}</g>`);
@@ -196,17 +204,18 @@ ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1
 
   // ----- terminal card -----
   const term = [];
-  const show = (begin, body, dy = 7) => `<g opacity="0"><animate attributeName="opacity" from="0" to="1" begin="${n(begin)}s" dur="0.45s" fill="freeze"/><animateTransform attributeName="transform" type="translate" values="0 ${dy};0 0" keyTimes="0;1" ${EASE} begin="${n(begin)}s" dur="0.5s" fill="freeze"/>${body}</g>`;
+  const show = (begin, body, dy = 7) => `<g>${fadeIn(begin)}${slideIn(begin, dy)}${body}</g>`;
   const chevron = (x, y, size = 9) => `<path d="M${x} ${n(y - size)}l${n(size / 2)} ${n(size / 2)}-${n(size / 2)} ${n(size / 2)}" fill="none" stroke="url(#accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
   let clips = 0;
   // a command that types itself once, with its own caret
   const command = (y, text, begin, per = 0.05) => {
-    const cw = 7.8, x = TX + 17, id = 'cmd' + clips++, len = text.length, dur = n(len * per);
-    const steps = Array.from({ length: len + 1 }, (_, i) => n(i * cw));
-    defs.push(`<clipPath id="${id}"><rect x="${x}" y="${y - 13}" width="0" height="18"><animate attributeName="width" calcMode="discrete" values="${steps.join(';')}" begin="${n(begin)}s" dur="${dur}s" fill="freeze"/></rect></clipPath>`);
-    return `<g opacity="0"><animate attributeName="opacity" from="0" to="1" begin="${n(begin - 0.25)}s" dur="0.01s" fill="freeze"/>${chevron(TX, y - 0.5)}
+    const cw = 7.8, x = TX + 17, id = 'cmd' + clips++, len = text.length, total = begin + len * per + 0.5;
+    const widths = Array.from({ length: len + 1 }, (_, i) => i * cw);
+    const timing = `calcMode="discrete" keyTimes="${widths.map((_, i) => i ? part(begin + i * per, total) : 0).join(';')}" dur="${n(total)}s" fill="freeze"`;
+    defs.push(`<clipPath id="${id}"><rect x="${x}" y="${y - 13}" width="${n(len * cw)}" height="18"><animate attributeName="width" values="${widths.map(n).join(';')}" ${timing}/></rect></clipPath>`);
+    return `<g>${flip(begin - 0.25, 0, 1)}${chevron(TX, y - 0.5)}
   <text x="${x}" y="${y}" ${MONO} font-size="13" fill="${t.muted}" textLength="${n(len * cw)}" clip-path="url(#${id})">${nbsp(text)}</text>
-  <rect x="${x}" y="${y - 11.5}" width="7" height="14" rx="1" fill="${t.muted}"><animate attributeName="x" calcMode="discrete" values="${steps.map(s => n(x + +s + 1)).join(';')}" begin="${n(begin)}s" dur="${dur}s" fill="freeze"/><animate attributeName="opacity" from="1" to="0" begin="${n(begin + len * per + 0.2)}s" dur="0.01s" fill="freeze"/></rect></g>`;
+  <rect x="${x}" y="${y - 11.5}" width="7" height="14" rx="1" fill="${t.muted}" opacity="0"><animate attributeName="x" values="${widths.map(w => n(x + w + 1)).join(';')}" ${timing}/><animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;${part(begin + len * per + 0.2, total)}" dur="${n(total)}s" fill="freeze"/></rect></g>`;
   };
 
   term.push(`<rect x="${T.x}" y="${T.y + BAR + 1}" width="${T.w}" height="${T.h - BAR - 1}" fill="url(#dots)" mask="url(#cornerOnly)"/>`);
@@ -219,7 +228,7 @@ ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1
   term.push(command(104, 'whoami', at.whoami, 0.07));
   term.push(show(at.hi, `<text x="${TX}" y="142" ${SANS} font-size="21" font-weight="500" fill="${t.muted}">Hi</text>
   <text x="${TX + 29}" y="142" ${SANS} font-size="20"><animateTransform attributeName="transform" type="rotate" values="0 ${TX + 47} 146;16 ${TX + 47} 146;-8 ${TX + 47} 146;14 ${TX + 47} 146;-4 ${TX + 47} 146;0 ${TX + 47} 146;0 ${TX + 47} 146" keyTimes="0;0.08;0.16;0.24;0.32;0.4;1" dur="3.6s" begin="${n(at.hi + 0.4)}s" repeatCount="indefinite"/>\u{1F44B}</text>`));
-  term.push(`<ellipse cx="${TX + 150}" cy="174" rx="250" ry="58" fill="url(#halo)" opacity="0"><animate attributeName="opacity" values="0;0.9" begin="${at.name}s" dur="0.8s" fill="freeze"/><animate attributeName="opacity" values="0.9;0.45;0.9" begin="${n(at.name + 0.8)}s" dur="4.2s" repeatCount="indefinite"/></ellipse>`);
+  term.push(`<ellipse cx="${TX + 150}" cy="174" rx="250" ry="58" fill="url(#halo)" opacity="0.9">${fadeIn(at.name, 0.8, 0.9)}<animate attributeName="opacity" values="0.9;0.45;0.9" begin="${n(at.name + 0.8)}s" dur="4.2s" repeatCount="indefinite"/></ellipse>`);
   term.push(show(at.name, `<text x="${TX - 1}" y="190" ${SANS} font-size="46" font-weight="700" letter-spacing="-1.2" fill="${t.text}">I'm <tspan fill="url(#flow)">${esc(NAME)}</tspan></text>`, 10));
 
   // the role line: every phrase types, waits, and is erased; the caret follows and only blinks while waiting
@@ -236,14 +245,16 @@ ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1
     for (let i = 1; i <= len; i++) ev.push([held + HOLD + i * ERASE, len - i]);
     for (const e of ev.slice(k ? 1 : 0)) caretX.push(e);
     clock = held + HOLD + len * ERASE + GAP;
-    defs.push(`<clipPath id="role${k}"><rect x="${RX}" y="${RY - 17}" width="0" height="24"><animate attributeName="width" calcMode="discrete" values="${ev.map(e => n(e[1] * RW)).join(';')}" keyTimes="${ev.map(e => n(e[0] / total * 10000) / 10000).join(';')}" begin="${at.role}s" dur="${n(total)}s" repeatCount="indefinite"/></rect></clipPath>`);
+    // at rest the first phrase is written out; until the loop starts it is held empty
+    defs.push(`<clipPath id="role${k}"><rect x="${RX}" y="${RY - 17}" width="${k ? 0 : n(len * RW)}" height="24">${k ? '' : `<animate attributeName="width" values="0;0" dur="${at.role}s"/>`}<animate attributeName="width" calcMode="discrete" values="${ev.map(e => n(e[1] * RW)).join(';')}" keyTimes="${ev.map(e => n(e[0] / total * 10000) / 10000).join(';')}" begin="${at.role}s" dur="${n(total)}s" repeatCount="indefinite"/></rect></clipPath>`);
     return `<text x="${RX}" y="${RY}" ${MONO} font-size="17" fill="${t.text}" textLength="${n(len * RW)}" clip-path="url(#role${k})">${nbsp(role)}</text>`;
   });
   const keys = a => a.map(e => n(e[0] / total * 10000) / 10000).join(';');
   // SMIL drops an animation whose key times do not grow, and it does so silently
   for (const list of [caretX.slice(1), caretOn]) list.forEach((e, i) => { if (i && e[0] <= list[i - 1][0] || e[0] > total) throw new Error('role timeline is out of order at ' + e[0]); });
   term.push(show(at.role - 0.3, `${chevron(TX, RY - 1, 10)}${roles.join('')}
-  <rect x="${RX + 2}" y="${RY - 15}" width="9" height="18" rx="1.5" fill="${cyan}">
+  <rect x="${n(RX + ROLES[0].length * RW + 2)}" y="${RY - 15}" width="9" height="18" rx="1.5" fill="${cyan}">
+    <animate attributeName="x" values="${RX + 2};${RX + 2}" dur="${at.role}s"/>
     <animate attributeName="x" calcMode="discrete" values="${caretX.slice(1).map(e => n(RX + e[1] * RW + 2)).join(';')}" keyTimes="${keys(caretX.slice(1))}" begin="${at.role}s" dur="${n(total)}s" repeatCount="indefinite"/>
     <animate attributeName="opacity" calcMode="discrete" values="${caretOn.map(e => e[1]).join(';')}" keyTimes="${keys(caretOn)}" begin="${at.role}s" dur="${n(total)}s" repeatCount="indefinite"/>
   </rect>`));
@@ -262,9 +273,9 @@ ${sparks.map((s, k) => `    <g><animate attributeName="opacity" values="1;0.25;1
     let x = TX;
     for (const s of row) {
       const w = Math.round(s.length * 7.5 + 28), cx = x + w / 2, cy = 438 + r * 36, id = 'pill' + p, begin = at.pills + p * 0.06;
-      term.push(`<g transform="translate(${n(cx)} ${cy})"><g id="${id}" opacity="0">
-  <animate attributeName="opacity" from="0" to="1" begin="${n(begin)}s" dur="0.3s" fill="freeze"/>
-  <animateTransform attributeName="transform" type="scale" values="0.82;1.05;1" keyTimes="0;0.6;1" begin="${n(begin)}s" dur="0.45s" fill="freeze"/>
+      term.push(`<g transform="translate(${n(cx)} ${cy})"><g id="${id}">
+  ${fadeIn(begin, 0.3)}
+  <animateTransform attributeName="transform" type="scale" values="0.82;0.82;1.05;1" keyTimes="0;${part(begin, begin + 0.45)};${part(begin + 0.27, begin + 0.45)};1" dur="${n(begin + 0.45)}s" fill="freeze"/>
   <animateTransform attributeName="transform" type="scale" to="1.07" begin="${id}.mouseover" dur="0.16s" fill="freeze"/>
   <animateTransform attributeName="transform" type="scale" to="1" begin="${id}.mouseout" dur="0.2s" fill="freeze"/>
   <ellipse rx="${n(w / 2 + 12)}" ry="24" fill="url(#halo)" opacity="0.35"><animate attributeName="opacity" values="0.3;0.95;0.3" begin="${n(begin + p * 0.22)}s" dur="3.4s" repeatCount="indefinite"/><animate attributeName="opacity" to="1.6" begin="${id}.mouseover" dur="0.16s" fill="freeze"/><animate attributeName="opacity" to="0.35" begin="${id}.mouseout" dur="0.2s" fill="freeze"/></ellipse>
